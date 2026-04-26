@@ -74,15 +74,28 @@ Any value accepted by Windows `<audio src="...">`:
 - `ms-winsoundevent:Notification.Mail`
 - `ms-winsoundevent:Notification.Reminder`
 - `ms-winsoundevent:Notification.SMS`
-- `file:///C:/path/to/custom.wav` (must be `<= 30s` for non-looping)
+- `file:///C:/path/to/custom.wav` (any size; played via `PlaySoundW` directly because `file://` audio in toast XML is dropped for unpackaged AppIDs)
+
+### Focus suppression
+
+`--skip-if-title <name>` suppresses both the toast and the audio when the foreground Windows Terminal window's title contains `<name>` AND the cursor is on the same monitor as that window. Useful so you don't get a toast for the tab you're already looking at.
+
+Override with `CLAUDE_NOTIFY_ALWAYS=1` to always fire regardless of focus.
+
+Multi-monitor caveat: if WT is the OS-level foreground but on a different monitor than your eyes (you walked away or are reading on another screen without clicking elsewhere), the cursor-monitor check usually catches it, but a passive-reading edge case still loses. Use `CLAUDE_NOTIFY_ALWAYS=1` if it bothers you.
+
+### Debug logging
+
+Set `CLAUDE_NOTIFY_DEBUG=<windows-path-to-log-file>` (e.g. `C:\Users\me\AppData\Local\Temp\notify.log`) and the suppression check will append its decisions to that file.
 
 ## Status
 
-- [x] `send` with title, body, audio
+- [x] `send` with title, body, audio (built-in `ms-winsoundevent:` or custom `file://` WAV via PlaySound)
 - [x] Custom AppID
 - [x] `register`: HKCU AppID DisplayName + URL protocol writes
 - [x] `focus`: brings any visible Windows Terminal (CASCADIA class) forward and runs `wsl.exe tmux select-window -t session:window`
-- [ ] Replace toast (vs. stack) when a newer one fires for the same tab
+- [x] `--skip-if-title` + cursor-monitor check + `CLAUDE_NOTIFY_ALWAYS` opt-out
+- [ ] Toast `Tag`/`Group` so repeated Notifications for the same tab replace each other instead of stacking
 - [ ] Custom icon registration
 
 ## License
