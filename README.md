@@ -65,9 +65,10 @@ After building, place the `.exe` somewhere reachable from WSL (e.g. `/mnt/c/User
 
 - [x] `send` with title, body, audio
 - [x] Custom AppID
-- [ ] `register`: HKCU AppID + URI protocol
-- [ ] `focus`: Windows Terminal foreground + tmux window switch
+- [x] `register`: HKCU AppID DisplayName + URL protocol writes
+- [x] `focus`: brings any visible Windows Terminal (CASCADIA class) forward and runs `wsl.exe tmux select-window -t session:window`
 - [ ] Replace toast (vs. stack) when a newer one fires for the same tab
+- [ ] Custom icon registration
 
 ## License
 
