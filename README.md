@@ -1,25 +1,22 @@
 # claude-notify
 
-Tiny Windows toast notifier for [Claude Code](https://claude.com/claude-code) hooks running under WSL.
+A small native Windows toast notifier, designed to be called from WSL. Built for [Claude Code](https://claude.com/claude-code) hook integration but useful for any WSL workflow that wants to surface Linux-side events as Windows toasts.
 
-Replaces a ~500ms `powershell.exe` call (CLR + WinRT init) with a ~10ms native binary while supporting custom audio, click-to-focus, and custom AppID branding.
-
-## Why
-
-Claude Code can fire `Stop` and `Notification` hooks when a turn ends or input is needed. Under WSL, the easy way to surface these as Windows toasts is to shell out to `powershell.exe`, but that pays ~300-800ms of process startup per toast. This binary hits the OS floor (process create + WinRT init, ~10ms) and leaves room for nicer features on top.
+Hits the OS floor for latency (~10-30ms per toast), supports custom audio, custom AppID branding, and click-to-focus on a specific tmux window.
 
 ## Features
 
 - Native Windows toast via WinRT (`Windows.UI.Notifications`)
 - Custom audio per toast (built-in `ms-winsoundevent:` names or `file:///` paths)
-- Click activation: brings Windows Terminal forward and switches to the originating tmux window
-- Custom AppID so toasts read "Claude Code", not "Run"
+- Click activation that brings Windows Terminal forward and switches to a specific tmux session/window
+- Custom AppID branding so toasts read "Claude Code"
+- Single static binary, ~450 KB, no runtime dependencies on the Windows side
 
 ## Build
 
-This is a Windows binary. Two ways to produce it.
+This produces a Windows `.exe`. Either cross-compile from WSL or build natively on Windows.
 
-### Cross-compile from WSL (recommended for this workflow)
+### Cross-compile from WSL
 
 ```bash
 sudo apt install -y mingw-w64
@@ -38,28 +35,46 @@ cargo build --release
 ## Usage
 
 ```bash
-# Send a toast
+# Show a toast
 claude-notify.exe send \
     --title "api-server" \
     --body "Task complete" \
     --sound "ms-winsoundevent:Notification.IM"
 
-# Send with click-to-focus on a specific tmux window
+# Show a clickable toast that focuses a tmux window when clicked
 claude-notify.exe send \
     --title "api-server" \
     --body "Needs input" \
-    --click "claude-notify://focus?target=tmux%3Dc1%3A0"
+    --sound "ms-winsoundevent:Notification.IM" \
+    --click "claude-notify:tmux=c1:0"
 
-# One-time setup: register the AppID and URI protocol in HKCU
+# One-time setup: register the AppID and the claude-notify:// URL protocol in HKCU
 claude-notify.exe register
 
-# Invoked by Windows on toast click
+# Invoked by Windows when a toast is clicked
 claude-notify.exe focus --target "tmux=c1:0"
 ```
 
-## Integrating with Claude Code
+### Click URI format
 
-After building, place the `.exe` somewhere reachable from WSL (e.g. `/mnt/c/Users/<you>/bin/`) and update `~/.claude/notify-windows.sh` to call it instead of inline PowerShell.
+`--click` accepts a URI of the form:
+
+```
+claude-notify:tmux=<session>:<window>
+```
+
+The `register` subcommand wires this scheme to call `claude-notify.exe focus --target "%1"`, so the click handler receives the URI verbatim and parses out the target.
+
+### Sound options
+
+Any value accepted by Windows `<audio src="...">`:
+
+- `ms-winsoundevent:Notification.Default`
+- `ms-winsoundevent:Notification.IM`
+- `ms-winsoundevent:Notification.Mail`
+- `ms-winsoundevent:Notification.Reminder`
+- `ms-winsoundevent:Notification.SMS`
+- `file:///C:/path/to/custom.wav` (must be `<= 30s` for non-looping)
 
 ## Status
 
