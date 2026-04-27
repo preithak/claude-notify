@@ -93,10 +93,12 @@ Set `CLAUDE_NOTIFY_DEBUG=<windows-path-to-log-file>` (e.g. `C:\Users\me\AppData\
 - [x] `send` with title, body, audio (built-in `ms-winsoundevent:` or custom `file://` WAV via PlaySound)
 - [x] Custom AppID
 - [x] `register`: HKCU AppID DisplayName + URL protocol writes
-- [x] `focus`: brings any visible Windows Terminal (CASCADIA class) forward and runs `wsl.exe tmux select-window -t session:window`
+- [~] `focus`: works (brings WT forward + `tmux select-window`), but click handler flashes a transient console window — **needs rework**
 - [x] `--skip-if-title` + cursor-monitor check + `CLAUDE_NOTIFY_ALWAYS` opt-out
 - [ ] Toast `Tag`/`Group` so repeated Notifications for the same tab replace each other instead of stacking
 - [ ] Custom icon registration
+
+See [`docs/tasks/open-items.md`](docs/tasks/open-items.md) for details on each deferred item.
 
 ## License
 
