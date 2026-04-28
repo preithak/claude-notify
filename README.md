@@ -100,7 +100,7 @@ When invoking from WSL, both `CLAUDE_NOTIFY_DEBUG` and `CLAUDE_NOTIFY_ALWAYS` ne
 - [x] `send` with title, body, audio (built-in `ms-winsoundevent:` or custom `file://` WAV via PlaySound)
 - [x] Custom AppID
 - [x] `register`: HKCU AppID DisplayName + URL protocol writes
-- [~] `focus`: works (brings WT forward + `tmux select-window`), but click handler flashes a transient console window — **needs rework**
+- [~] `focus`: brings WT forward + `tmux select-window` (verified via debug log), but click handler flashes a transient console window. The two clean fixes (windows-subsystem build, command-line wrapper) each have a blocker; see [`docs/tasks/open-items.md`](docs/tasks/open-items.md). **Deferred.**
 - [x] `--skip-if-title` (foreground-or-cursor-over) + `CLAUDE_NOTIFY_ALWAYS` opt-out
 - [x] `--tag` / `--group` for Action Center dedup
 - [ ] Custom icon registration

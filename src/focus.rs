@@ -5,13 +5,28 @@ use std::process::Command;
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetClassNameW, IsWindowVisible, SetForegroundWindow,
+    EnumWindows, GetClassNameW, GetWindowTextW, IsWindowVisible, SetForegroundWindow,
 };
 
+fn debug_log(msg: &str) {
+    if let Ok(p) = std::env::var("CLAUDE_NOTIFY_DEBUG") {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(p) {
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let _ = writeln!(f, "[ts={ts}] [focus] {msg}");
+        }
+    }
+}
+
 pub fn run(target: Option<&str>) -> Result<()> {
+    debug_log(&format!("invoked, target={target:?}"));
     bring_terminal_forward();
     if let Some(t) = target {
         if let Some((session, window)) = parse_tmux_target(t) {
+            debug_log(&format!("spawning wsl.exe tmux select-window -t {session}:{window}"));
             let _ = Command::new("wsl.exe")
                 .args([
                     "-e",
@@ -45,9 +60,17 @@ fn bring_terminal_forward() {
     let mut hwnd = HWND::default();
     unsafe {
         let _ = EnumWindows(Some(enum_proc), LPARAM(&mut hwnd as *mut _ as isize));
-        if !hwnd.0.is_null() {
-            let _ = SetForegroundWindow(hwnd);
+        if hwnd.0.is_null() {
+            debug_log("EnumWindows found NO CASCADIA window");
+            return;
         }
+        // Read the title for diagnosis
+        let mut tb = [0u16; 512];
+        let tl = GetWindowTextW(hwnd, &mut tb) as usize;
+        let title = String::from_utf16_lossy(&tb[..tl]);
+        debug_log(&format!("found WT hwnd={:?} title={title:?}", hwnd.0));
+        let result = SetForegroundWindow(hwnd);
+        debug_log(&format!("SetForegroundWindow returned {:?}", result));
     }
 }
 
