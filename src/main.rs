@@ -29,12 +29,19 @@ enum Command {
         /// Omit to make the toast dismiss-only.
         #[arg(long)]
         click: Option<String>,
-        /// Suppress the toast (and audio) when the foreground Windows Terminal
-        /// window's title contains this string AND the cursor is on the same
-        /// monitor as that window. Set the env var CLAUDE_NOTIFY_ALWAYS=1 to
-        /// override and always fire.
+        /// Suppress the toast (and audio) when either the foreground window
+        /// is Windows Terminal with this string in its title, OR the cursor is
+        /// hovering over a Windows Terminal window with this string in its
+        /// title. Set CLAUDE_NOTIFY_ALWAYS=1 to override and always fire.
         #[arg(long)]
         skip_if_title: Option<String>,
+        /// Tag for Action Center deduplication (max 64 chars). Toasts sharing
+        /// the same (tag, group) replace each other instead of stacking.
+        #[arg(long)]
+        tag: Option<String>,
+        /// Group for Action Center deduplication (max 64 chars).
+        #[arg(long)]
+        group: Option<String>,
     },
     /// Handle a click activation. Brings Windows Terminal forward and switches the tmux window if `--target` is given.
     Focus {
@@ -54,12 +61,16 @@ fn main() -> anyhow::Result<()> {
             sound,
             click,
             skip_if_title,
+            tag,
+            group,
         } => send::run(
             &title,
             &body,
             sound.as_deref(),
             click.as_deref(),
             skip_if_title.as_deref(),
+            tag.as_deref(),
+            group.as_deref(),
         ),
         Command::Focus { target } => focus::run(target.as_deref()),
         Command::Register => register::run(),

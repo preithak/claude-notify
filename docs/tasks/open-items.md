@@ -32,22 +32,9 @@ Backlog tracking for `claude-notify`. Each item is deferred (not yet prioritized
 
 ---
 
-## Toast Tag/Group dedup for repeated Notification events
+## ~~Toast Tag/Group dedup~~ — done
 
-**Symptom:** Claude Code re-fires the `Notification` event periodically while waiting for input. Each fire produces a separate toast; they stack in Action Center.
-
-**Status:** deferred. Wait until repeats actually feel noisy in day-to-day use.
-
-**Approach:** set `Tag` (and optionally `Group`) on the `ToastNotification` object before showing it. Windows replaces any existing toast with the same `(Tag, Group)` pair instead of stacking.
-
-**Implementation sketch:**
-
-- Add `--tag <string>` and `--group <string>` flags to `send`.
-- Helper builds the tag from event + tmux session + tmux window:
-  - `--tag "<event>-<tmux_session>-<tmux_window>"`
-  - This way: repeated `Notification` events for the same tab replace each other, but `Stop` and `Notification` don't collide on a single tag, and different tabs don't dedupe against each other.
-
-**Performance impact:** sub-millisecond per fire (one extra `SetTag`/`SetGroup` call on the toast object).
+Implemented. `send` now accepts `--tag` and `--group`; the helper passes `--tag "<session>-<window>" --group "<event>"`, so repeated `Notification` events for the same tab replace each other in Action Center while a Stop and a Notification on the same tab remain distinct toasts.
 
 ---
 

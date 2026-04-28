@@ -15,6 +15,8 @@ pub fn run(
     sound: Option<&str>,
     click: Option<&str>,
     skip_if_title: Option<&str>,
+    tag: Option<&str>,
+    group: Option<&str>,
 ) -> Result<()> {
     if let Some(t) = skip_if_title {
         if should_skip(t) {
@@ -30,7 +32,7 @@ pub fn run(
     };
 
     let xml_str = build_xml(title, body, toast_audio, click, play_path.is_some());
-    show(&xml_str)?;
+    show(&xml_str, tag, group)?;
 
     if let Some(path) = play_path.as_deref() {
         play_sync(path);
@@ -38,71 +40,90 @@ pub fn run(
     Ok(())
 }
 
-/// Suppress the toast when the foreground window is Windows Terminal AND its
-/// title contains the expected tab name AND the cursor is on the same monitor
-/// as that window. The cursor-monitor check is a cheap mitigation for the
-/// "WT held abandoned focus on a different monitor" case in multi-monitor
-/// setups (see README).
+/// Suppress the toast when *either* of these is true:
+///   1. The foreground window's class is CASCADIA_HOSTING_WINDOW_CLASS and
+///      its title contains the expected tab name (active focus on the tab).
+///   2. The cursor is hovering over a Windows Terminal window whose title
+///      contains the expected tab name (you're looking at the terminal even
+///      if focus drifted to another window like a browser tab).
+///
+/// `CLAUDE_NOTIFY_ALWAYS=1` overrides both checks. `CLAUDE_NOTIFY_DEBUG=<path>`
+/// appends decisions to a log for diagnosis.
 #[cfg(windows)]
 fn should_skip(expected_title: &str) -> bool {
-    use windows::Win32::Foundation::POINT;
-    use windows::Win32::Graphics::Gdi::{
-        MonitorFromPoint, MonitorFromWindow, MONITOR_DEFAULTTONEAREST,
-    };
+    use windows::Win32::Foundation::{HWND, POINT};
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowTextW,
+        GetAncestor, GetClassNameW, GetCursorPos, GetForegroundWindow, GetWindowTextW,
+        WindowFromPoint, GA_ROOT,
     };
 
     if std::env::var_os("CLAUDE_NOTIFY_ALWAYS").is_some() {
         return false;
     }
-    // Debug logging when CLAUDE_NOTIFY_DEBUG is set to a Windows-style path
-    // (e.g. C:\Users\me\AppData\Local\Temp\notify.log).
     let debug_path = std::env::var("CLAUDE_NOTIFY_DEBUG").ok();
     let log = |msg: &str| {
         if let Some(p) = &debug_path {
             use std::io::Write;
             if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(p) {
-                let _ = writeln!(f, "{msg}");
+                let ts = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let _ = writeln!(f, "[ts={ts}] {msg}");
             }
         }
     };
 
-    unsafe {
-        let hwnd = GetForegroundWindow();
+    let class_and_title = |hwnd: HWND| -> (String, String) {
         if hwnd.0.is_null() {
-            log("[skip-debug] no foreground window -> fire");
-            return false;
+            return (String::new(), String::new());
         }
-        let mut class_buf = [0u16; 256];
-        let class_len = GetClassNameW(hwnd, &mut class_buf) as usize;
-        let class = String::from_utf16_lossy(&class_buf[..class_len]);
-        let mut title_buf = [0u16; 512];
-        let title_len = GetWindowTextW(hwnd, &mut title_buf) as usize;
-        let title = String::from_utf16_lossy(&title_buf[..title_len]);
-        log(&format!("[skip-debug] expected={expected_title:?} class={class:?} title={title:?}"));
+        unsafe {
+            let mut cb = [0u16; 256];
+            let cl = GetClassNameW(hwnd, &mut cb) as usize;
+            let mut tb = [0u16; 512];
+            let tl = GetWindowTextW(hwnd, &mut tb) as usize;
+            (
+                String::from_utf16_lossy(&cb[..cl]),
+                String::from_utf16_lossy(&tb[..tl]),
+            )
+        }
+    };
+    let matches_wt = |class: &str, title: &str| -> bool {
+        class.contains("CASCADIA") && title.contains(expected_title)
+    };
 
-        if class_len == 0 || !class.contains("CASCADIA") {
-            log("[skip-debug] class not CASCADIA -> fire");
-            return false;
-        }
-        if title_len == 0 || !title.contains(expected_title) {
-            log("[skip-debug] title does not contain expected -> fire");
-            return false;
-        }
-        let mut cursor = POINT::default();
-        if GetCursorPos(&mut cursor).is_err() {
-            log("[skip-debug] GetCursorPos failed -> skip");
+    unsafe {
+        // Check 1: foreground window
+        let fg = GetForegroundWindow();
+        let (fg_class, fg_title) = class_and_title(fg);
+        log(&format!(
+            "[skip-debug] expected={expected_title:?} fg.class={fg_class:?} fg.title={fg_title:?}"
+        ));
+        if matches_wt(&fg_class, &fg_title) {
+            log("[skip-debug] foreground is matching WT -> skip");
             return true;
         }
-        let cursor_mon = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
-        let win_mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        let same = cursor_mon == win_mon;
-        log(&format!(
-            "[skip-debug] cursor_mon={:?} win_mon={:?} same={} -> {}",
-            cursor_mon, win_mon, same, if same { "skip" } else { "fire" }
-        ));
-        same
+
+        // Check 2: cursor is over a WT window
+        let mut cursor = POINT::default();
+        if GetCursorPos(&mut cursor).is_ok() {
+            let under = WindowFromPoint(cursor);
+            let root = GetAncestor(under, GA_ROOT);
+            let (cur_class, cur_title) = class_and_title(root);
+            log(&format!(
+                "[skip-debug] cursor.class={cur_class:?} cursor.title={cur_title:?}"
+            ));
+            if matches_wt(&cur_class, &cur_title) {
+                log("[skip-debug] cursor over matching WT -> skip");
+                return true;
+            }
+        } else {
+            log("[skip-debug] GetCursorPos failed");
+        }
+
+        log("[skip-debug] neither check matched -> fire");
+        false
     }
 }
 
@@ -112,18 +133,27 @@ fn should_skip(_: &str) -> bool {
 }
 
 #[cfg(windows)]
-fn show(xml_str: &str) -> Result<()> {
+fn show(xml_str: &str, tag: Option<&str>, group: Option<&str>) -> Result<()> {
     let xml = XmlDocument::new()?;
     xml.LoadXml(&HSTRING::from(xml_str))
         .context("failed to parse toast XML")?;
     let toast = ToastNotification::CreateToastNotification(&xml)?;
+    if let Some(t) = tag {
+        // Tag is limited to 64 characters; truncate to be safe.
+        let trimmed: String = t.chars().take(64).collect();
+        toast.SetTag(&HSTRING::from(trimmed.as_str()))?;
+    }
+    if let Some(g) = group {
+        let trimmed: String = g.chars().take(64).collect();
+        toast.SetGroup(&HSTRING::from(trimmed.as_str()))?;
+    }
     let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(APP_ID))?;
     notifier.Show(&toast)?;
     Ok(())
 }
 
 #[cfg(not(windows))]
-fn show(_xml_str: &str) -> Result<()> {
+fn show(_xml_str: &str, _tag: Option<&str>, _group: Option<&str>) -> Result<()> {
     anyhow::bail!("toast notifications are only supported on Windows builds")
 }
 

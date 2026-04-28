@@ -78,15 +78,22 @@ Any value accepted by Windows `<audio src="...">`:
 
 ### Focus suppression
 
-`--skip-if-title <name>` suppresses both the toast and the audio when the foreground Windows Terminal window's title contains `<name>` AND the cursor is on the same monitor as that window. Useful so you don't get a toast for the tab you're already looking at.
+`--skip-if-title <name>` suppresses both the toast and the audio when **either**:
 
-Override with `CLAUDE_NOTIFY_ALWAYS=1` to always fire regardless of focus.
+1. The foreground window is Windows Terminal and its title contains `<name>` (active focus on the tab), or
+2. The cursor is hovering over a Windows Terminal window whose title contains `<name>` (you're looking at the terminal even if focus drifted to a browser tab or another app).
 
-Multi-monitor caveat: if WT is the OS-level foreground but on a different monitor than your eyes (you walked away or are reading on another screen without clicking elsewhere), the cursor-monitor check usually catches it, but a passive-reading edge case still loses. Use `CLAUDE_NOTIFY_ALWAYS=1` if it bothers you.
+Override with `CLAUDE_NOTIFY_ALWAYS=1` to always fire regardless.
+
+### Tag/Group dedup
+
+`--tag <s>` and `--group <s>` set the toast's `Tag` and `Group` properties. Toasts sharing the same `(tag, group)` replace each other in Action Center instead of stacking. Useful for e.g. Claude Code's `Notification` event, which re-fires periodically while waiting and otherwise piles up. Each value is capped at 64 chars (Windows limit); values longer than that are truncated.
 
 ### Debug logging
 
 Set `CLAUDE_NOTIFY_DEBUG=<windows-path-to-log-file>` (e.g. `C:\Users\me\AppData\Local\Temp\notify.log`) and the suppression check will append its decisions to that file.
+
+When invoking from WSL, both `CLAUDE_NOTIFY_DEBUG` and `CLAUDE_NOTIFY_ALWAYS` need to be in `WSLENV` to propagate to the Windows binary. The provided helper script (`notify-windows.sh`) handles that.
 
 ## Status
 
@@ -94,8 +101,8 @@ Set `CLAUDE_NOTIFY_DEBUG=<windows-path-to-log-file>` (e.g. `C:\Users\me\AppData\
 - [x] Custom AppID
 - [x] `register`: HKCU AppID DisplayName + URL protocol writes
 - [~] `focus`: works (brings WT forward + `tmux select-window`), but click handler flashes a transient console window — **needs rework**
-- [x] `--skip-if-title` + cursor-monitor check + `CLAUDE_NOTIFY_ALWAYS` opt-out
-- [ ] Toast `Tag`/`Group` so repeated Notifications for the same tab replace each other instead of stacking
+- [x] `--skip-if-title` (foreground-or-cursor-over) + `CLAUDE_NOTIFY_ALWAYS` opt-out
+- [x] `--tag` / `--group` for Action Center dedup
 - [ ] Custom icon registration
 
 See [`docs/tasks/open-items.md`](docs/tasks/open-items.md) for details on each deferred item.
